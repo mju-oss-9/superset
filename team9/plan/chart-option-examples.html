@@ -1,0 +1,392 @@
+<title>Superset 차트 옵션 후보</title>
+<meta name="description" content="공개SW실무 9조: Apache Superset 기존 차트에 추가할 옵션 후보 5개를 직접 조작해 보는 예시">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 위는 개요, 아래는 카드 5장. 카드마다 왼쪽에 Superset식 설정 패널, 오른쪽에 실시간 차트 */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --fg: #1c2630;
+  --muted: #5d6973;
+  --line: #dbe2e7;
+  --accent: #1a93b1;
+  --accent-soft: #e2f3f8;
+  --new: #c2410c;
+  --new-soft: #fdeee4;
+  --target: #e04355;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151a; --surface: #172028; --fg: #e4ebf0; --muted: #96a4ae; --line: #2a3742;
+    --accent: #45bfdc; --accent-soft: #15323c; --new: #fb923c; --new-soft: #3a2416; --target: #f0697a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151a; --surface: #172028; --fg: #e4ebf0; --muted: #96a4ae; --line: #2a3742;
+  --accent: #45bfdc; --accent-soft: #15323c; --new: #fb923c; --new-soft: #3a2416; --target: #f0697a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; display: flex; flex-direction: column; gap: 36px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.3; }
+h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.25rem; font-weight: 700; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+.eyebrow { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+header { display: flex; flex-direction: column; gap: 10px; }
+header p { color: var(--muted); }
+
+.types { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.types div { display: flex; flex-direction: column; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 0.82rem; padding: 2px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.chip.pick { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: 290px minmax(0, 1fr); overflow: hidden; }
+.card-head { grid-column: 1 / -1; padding: 18px 22px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.card-head .row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.num { font-family: var(--font-mono); color: var(--accent); font-weight: 500; }
+.card-head p { color: var(--muted); font-size: 0.93rem; }
+
+.panel { border-right: 1px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; background: var(--bg); }
+.panel-title { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.ctl { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); }
+.ctl.is-new { border-color: var(--new); background: var(--new-soft); }
+.ctl.old { opacity: 0.7; }
+.ctl label, .ctl .lbl { font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.badge { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em; color: var(--new); border: 1px solid var(--new); border-radius: 4px; padding: 0 5px; }
+.ctl .key { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+.ctl input[type=number], .ctl select { font: inherit; font-size: 0.85rem; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--fg); width: 100%; }
+.ctl input[type=range] { width: 100%; accent-color: var(--new); }
+.ctl input[type=checkbox] { accent-color: var(--new); width: 15px; height: 15px; }
+.ctl input:disabled { opacity: 0.45; }
+.val { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.files { font-size: 0.8rem; display: flex; flex-direction: column; gap: 3px; margin-top: auto; }
+.files .eyebrow { font-size: 0.68rem; }
+.files code { color: var(--fg); overflow-wrap: anywhere; }
+
+.stage { padding: 12px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.state { font-size: 0.78rem; color: var(--muted); padding-inline: 8px; }
+.state b { color: var(--new); font-weight: 600; }
+.chart { width: 100%; height: 340px; }
+
+.excluded { display: flex; flex-direction: column; gap: 10px; }
+.excluded ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.excluded li { color: var(--muted); }
+.excluded li b { color: var(--fg); font-weight: 600; }
+footer { font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (max-width: 760px) {
+  .card { grid-template-columns: minmax(0, 1fr); }
+  .panel { border-right: 0; border-bottom: 1px solid var(--line); }
+  .chart { height: 300px; }
+  h1 { font-size: 1.5rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">공개SW실무 9조 · Apache Superset</span>
+    <h1>Superset 차트 옵션 후보</h1>
+    <p>기존 차트에 설정 옵션 하나를 더하는 작은 기능 5개입니다. 왼쪽 설정 패널에서 <b style="color:var(--new)">새 옵션</b>을 바꿔 보면 오른쪽 차트가 바로 바뀝니다. 새 옵션을 끄면 지금 Superset의 모습입니다. 차트는 Superset이 실제로 쓰는 ECharts로 그렸습니다.</p>
+  </header>
+
+  <section class="types" aria-label="Superset 차트 종류">
+    <div>
+      <span class="eyebrow">기본 차트</span>
+      <div class="chips"><span class="chip">막대·선 (Timeseries)</span><span class="chip">파이</span><span class="chip">큰 숫자</span><span class="chip">표</span><span class="chip">피벗 테이블</span></div>
+    </div>
+    <div>
+      <span class="eyebrow">ECharts 특수 차트</span>
+      <div class="chips"><span class="chip pick">게이지</span><span class="chip pick">레이더</span><span class="chip pick">깔때기</span><span class="chip pick">트리맵</span><span class="chip pick">폭포</span><span class="chip">히트맵</span><span class="chip">생키</span><span class="chip">선버스트</span><span class="chip">박스플롯</span><span class="chip">캔들스틱</span><span class="chip">간트</span><span class="chip">불릿</span><span class="chip">그래프</span><span class="chip">버블</span><span class="chip">히스토그램</span></div>
+    </div>
+    <div>
+      <span class="eyebrow">별도 플러그인</span>
+      <div class="chips"><span class="chip">워드클라우드</span><span class="chip">세계지도</span><span class="chip">국가지도</span><span class="chip">달력</span><span class="chip">코드 다이어그램</span><span class="chip">deck.gl 지도</span></div>
+    </div>
+  </section>
+
+  <!-- 1 게이지 -->
+  <article class="card">
+    <div class="card-head">
+      <div class="row"><span class="num">1</span><h2>게이지: 목표값 표시</h2></div>
+      <p>목표값을 입력하면 눈금 위에 빨간 표시가 생기고, 숫자 아래에 목표까지 남은 양이 나옵니다. "이번 달 목표 대비 얼마나 왔나"를 한눈에 보여 줍니다.</p>
+    </div>
+    <div class="panel">
+      <span class="panel-title">Chart Options</span>
+      <div class="ctl old"><span class="lbl">최솟값 / 최댓값</span><span class="val">0 / 100 (기존 옵션)</span></div>
+      <div class="ctl is-new">
+        <label for="g-on"><input type="checkbox" id="g-on" checked> 목표값 표시 <span class="badge">새 옵션</span></label>
+        <input type="number" id="g-target" value="80" min="0" max="100" aria-label="목표값">
+        <span class="key">target_value</span>
+      </div>
+      <div class="files"><span class="eyebrow">고칠 파일 · plugin-chart-echarts/src/Gauge/</span><code>controlPanel.tsx</code><code>transformProps.ts</code><code>types.ts</code></div>
+    </div>
+    <div class="stage"><div class="state" id="g-state"></div><div class="chart" id="c-gauge"></div></div>
+  </article>
+
+  <!-- 2 레이더 -->
+  <article class="card">
+    <div class="card-head">
+      <div class="row"><span class="num">2</span><h2>레이더: 영역 채우기</h2></div>
+      <p>지금은 선만 그려집니다. 켜면 도형 안쪽이 반투명하게 채워져 두 팀의 차이가 면적으로 보입니다. 투명도도 고를 수 있습니다.</p>
+    </div>
+    <div class="panel">
+      <span class="panel-title">Chart Options</span>
+      <div class="ctl old"><span class="lbl">원 모양으로 그리기</span><span class="val">is_circle (기존 옵션)</span></div>
+      <div class="ctl is-new">
+        <label for="r-on"><input type="checkbox" id="r-on" checked> 영역 채우기 <span class="badge">새 옵션</span></label>
+        <input type="range" id="r-op" min="10" max="80" value="30" aria-label="채우기 투명도">
+        <span class="val" id="r-op-v"></span>
+        <span class="key">show_area · area_opacity</span>
+      </div>
+      <div class="files"><span class="eyebrow">고칠 파일 · plugin-chart-echarts/src/Radar/</span><code>controlPanel.tsx</code><code>transformProps.ts</code><code>types.ts</code></div>
+    </div>
+    <div class="stage"><div class="state" id="r-state"></div><div class="chart" id="c-radar"></div></div>
+  </article>
+
+  <!-- 3 깔때기 -->
+  <article class="card">
+    <div class="card-head">
+      <div class="row"><span class="num">3</span><h2>깔때기: 정렬 방향과 단계 간격</h2></div>
+      <p>지금은 가운데 정렬에 단계가 붙어 있는 모양 하나뿐입니다. 왼쪽이나 오른쪽 정렬로 계단처럼 만들거나, 단계 사이에 틈을 줄 수 있게 합니다. 간격 값은 코드에 이미 있지만(기본 0) 설정 화면에 칸이 없어서 사용자가 바꿀 수 없습니다.</p>
+    </div>
+    <div class="panel">
+      <span class="panel-title">Chart Options</span>
+      <div class="ctl old"><span class="lbl">% 계산 방식</span><span class="val">percent_calculation_type (기존 옵션)</span></div>
+      <div class="ctl is-new">
+        <label for="f-align">정렬 방향 <span class="badge">새 옵션</span></label>
+        <select id="f-align"><option value="center">가운데 (지금)</option><option value="left" selected>왼쪽</option><option value="right">오른쪽</option></select>
+        <span class="key">funnel_align</span>
+      </div>
+      <div class="ctl is-new">
+        <label for="f-gap">단계 간격 <span class="badge">새 옵션</span></label>
+        <input type="range" id="f-gap" min="0" max="16" value="6">
+        <span class="val" id="f-gap-v"></span>
+        <span class="key">funnel_gap</span>
+      </div>
+      <div class="files"><span class="eyebrow">고칠 파일 · plugin-chart-echarts/src/Funnel/</span><code>controlPanel.tsx</code><code>transformProps.ts</code><code>types.ts</code></div>
+    </div>
+    <div class="stage"><div class="state" id="f-state"></div><div class="chart" id="c-funnel"></div></div>
+  </article>
+
+  <!-- 4 트리맵 -->
+  <article class="card">
+    <div class="card-head">
+      <div class="row"><span class="num">4</span><h2>트리맵: 글자 크기 조절</h2></div>
+      <p>사각형 안 글자 크기가 11px로 고정이라 칸이 많으면 글자가 잘리거나 너무 작습니다. 슬라이더로 크기를 고를 수 있게 합니다.</p>
+    </div>
+    <div class="panel">
+      <span class="panel-title">Chart Options</span>
+      <div class="ctl old"><span class="lbl">상위 그룹 이름 표시</span><span class="val">show_upper_labels (기존 옵션)</span></div>
+      <div class="ctl is-new">
+        <label for="t-size">글자 크기 <span class="badge">새 옵션</span></label>
+        <input type="range" id="t-size" min="8" max="22" value="16">
+        <span class="val" id="t-size-v"></span>
+        <span class="key">label_font_size</span>
+      </div>
+      <div class="files"><span class="eyebrow">고칠 파일 · plugin-chart-echarts/src/Treemap/</span><code>controlPanel.tsx</code><code>transformProps.ts</code><code>types.ts</code></div>
+    </div>
+    <div class="stage"><div class="state" id="t-state"></div><div class="chart" id="c-treemap"></div></div>
+  </article>
+
+  <!-- 5 폭포 -->
+  <article class="card">
+    <div class="card-head">
+      <div class="row"><span class="num">5</span><h2>폭포: 막대 두께 조절</h2></div>
+      <p>돈이 어디서 들어오고 나갔는지 보여 주는 차트입니다. 지금은 막대 두께를 자동으로 정합니다. 직접 지정하면 항목이 적을 때 막대가 너무 뚱뚱해지는 문제를 줄일 수 있습니다.</p>
+    </div>
+    <div class="panel">
+      <span class="panel-title">Chart Options</span>
+      <div class="ctl old"><span class="lbl">증가·감소·합계 색</span><span class="val">increase_color 등 (기존 옵션)</span></div>
+      <div class="ctl is-new">
+        <label for="w-on"><input type="checkbox" id="w-on" checked> 막대 두께 직접 지정 <span class="badge">새 옵션</span></label>
+        <input type="range" id="w-width" min="15" max="95" value="35" aria-label="막대 두께">
+        <span class="val" id="w-width-v"></span>
+        <span class="key">bar_width</span>
+      </div>
+      <div class="files"><span class="eyebrow">고칠 파일 · plugin-chart-echarts/src/Waterfall/</span><code>controlPanel.tsx</code><code>transformProps.ts</code><code>types.ts</code></div>
+    </div>
+    <div class="stage"><div class="state" id="w-state"></div><div class="chart" id="c-waterfall"></div></div>
+  </article>
+
+  <section class="excluded">
+    <h2>이미 있어서 뺀 아이디어</h2>
+    <p style="color:var(--muted)">좋아 보여도 Superset에 이미 있는 옵션은 후보가 될 수 없습니다. 후보를 낼 때는 그 차트의 <code>controlPanel.tsx</code>에 같은 옵션이 있는지 먼저 확인해 주세요.</p>
+    <ul>
+      <li><b>파이</b> 작은 조각을 "기타"로 묶기 → <code>threshold_for_other</code></li>
+      <li><b>깔때기</b> 단계별 전환율(%) → <code>percent_calculation_type</code></li>
+      <li><b>게이지</b> 구간별 색 → <code>intervals</code>, <code>interval_color_indices</code></li>
+      <li><b>레이더</b> 원 모양으로 그리기 → <code>is_circle</code></li>
+      <li><b>폭포</b> 합계 막대 표시 → <code>show_total</code></li>
+    </ul>
+  </section>
+
+  <footer>2026-10-11 apache/superset master 브랜치의 <code>superset-frontend/plugins/plugin-chart-echarts/src/</code> 아래 각 차트의 <code>controlPanel.tsx</code>(설정 화면)와 <code>transformProps.ts</code>(차트 그리는 코드)를 기준으로 확인했습니다. 차트의 숫자는 예시 데이터입니다.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<script>
+(function () {
+  // Superset 기본 범주 색 (supersetColors)
+  var SUPERSET = ['#1FA8C9', '#454E7C', '#5AC189', '#FF7F44', '#666666', '#E04355', '#FCC700', '#A868B7', '#3CCCCB', '#A38F79'];
+  var $ = function (id) { return document.getElementById(id); };
+  function tok(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function T() { return { fg: tok('--fg'), muted: tok('--muted'), line: tok('--line'), accent: tok('--accent'), target: tok('--target'), surface: tok('--surface'), font: tok('--font-body') }; }
+  function state(id, on, text) { $(id).innerHTML = on ? '<b>새 옵션 적용</b> · ' + text : '지금 Superset 모습'; }
+
+  var charts = {};
+  function mk(id) { charts[id] = echarts.init($(id), null, { renderer: 'svg' }); return charts[id]; }
+
+  // 1 게이지
+  var gauge = mk('c-gauge');
+  function drawGauge() {
+    var t = T(), on = $('g-on').checked, target = Math.max(0, Math.min(100, Number($('g-target').value) || 0)), value = 64;
+    $('g-target').disabled = !on;
+    state('g-state', on, '목표 ' + target + '%');
+    var base = { type: 'gauge', min: 0, max: 100, startAngle: 225, endAngle: -45, radius: '82%', center: ['50%', '52%'] };
+    var series = [Object.assign({}, base, {
+      progress: { show: true, width: 16, itemStyle: { color: SUPERSET[0] } },
+      axisLine: { lineStyle: { width: 16, color: [[1, t.line]] } },
+      pointer: { length: '58%', width: 5, itemStyle: { color: t.fg } },
+      anchor: { show: true, size: 12, itemStyle: { color: t.fg } },
+      axisTick: { show: false },
+      splitLine: { length: 8, distance: 4, lineStyle: { color: t.muted, width: 1 } },
+      axisLabel: { color: t.muted, distance: 18, fontSize: 11, fontFamily: t.font },
+      title: { offsetCenter: [0, '92%'], color: t.muted, fontSize: 12, fontFamily: t.font },
+      detail: {
+        offsetCenter: [0, '62%'], fontFamily: t.font,
+        formatter: function (v) { return on ? '{v|' + v + '%}\n{s|목표 ' + target + '% · ' + (target > v ? (target - v) + '%p 남음' : '달성') + '}' : '{v|' + v + '%}'; },
+        rich: { v: { fontSize: 26, fontWeight: 700, color: t.fg, lineHeight: 32 }, s: { fontSize: 12, color: t.target, lineHeight: 18 } }
+      },
+      data: [{ value: value, name: '이번 달 매출 달성률' }]
+    })];
+    if (on) series.push(Object.assign({}, base, {
+      z: 5, axisLine: { show: false }, splitLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false },
+      progress: { show: false }, anchor: { show: false }, title: { show: false }, detail: { show: false },
+      pointer: { icon: 'rect', length: '22%', width: 4, offsetCenter: [0, '-80%'], itemStyle: { color: t.target } },
+      data: [{ value: target }]
+    }));
+    gauge.setOption({ series: series }, true);
+  }
+
+  // 2 레이더
+  var radar = mk('c-radar');
+  function drawRadar() {
+    var t = T(), on = $('r-on').checked, op = Number($('r-op').value) / 100;
+    $('r-op').disabled = !on;
+    $('r-op-v').textContent = '투명도 ' + Math.round(op * 100) + '%';
+    state('r-state', on, '투명도 ' + Math.round(op * 100) + '%');
+    function s(name, data, c) { return { name: name, value: data, symbolSize: 5, lineStyle: { width: 2, color: c }, itemStyle: { color: c }, areaStyle: on ? { color: c, opacity: op } : undefined }; }
+    radar.setOption({
+      color: SUPERSET,
+      legend: { bottom: 0, textStyle: { color: t.fg, fontFamily: t.font } },
+      radar: {
+        radius: '62%', center: ['50%', '48%'],
+        indicator: [{ name: '응답 속도', max: 100 }, { name: '정확도', max: 100 }, { name: '사용성', max: 100 }, { name: '안정성', max: 100 }, { name: '비용', max: 100 }],
+        axisName: { color: t.muted, fontFamily: t.font },
+        splitLine: { lineStyle: { color: t.line } }, splitArea: { show: false }, axisLine: { lineStyle: { color: t.line } }
+      },
+      series: [{ type: 'radar', data: [s('A안', [82, 70, 90, 64, 55], SUPERSET[0]), s('B안', [58, 88, 66, 86, 78], SUPERSET[3])] }]
+    }, true);
+  }
+
+  // 3 깔때기
+  var funnel = mk('c-funnel');
+  function drawFunnel() {
+    var t = T(), align = $('f-align').value, gap = Number($('f-gap').value);
+    $('f-gap-v').textContent = gap === 0 ? '0px (지금)' : gap + 'px';
+    var on = align !== 'center' || gap > 0;
+    state('f-state', on, ({ center: '가운데', left: '왼쪽', right: '오른쪽' })[align] + ' 정렬 · 간격 ' + gap + 'px');
+    funnel.setOption({
+      color: SUPERSET,
+      tooltip: { trigger: 'item' },
+      series: [{
+        type: 'funnel', left: '8%', width: '84%', top: 16, bottom: 16, sort: 'descending',
+        funnelAlign: align, gap: gap, minSize: '12%',
+        label: { show: true, position: 'inside', color: '#fff', fontFamily: t.font, formatter: '{b}  {c}' },
+        itemStyle: { borderWidth: 0 },
+        data: [{ name: '방문', value: 1000 }, { name: '상품 조회', value: 620 }, { name: '장바구니', value: 310 }, { name: '결제 시작', value: 180 }, { name: '구매 완료', value: 140 }]
+      }]
+    }, true);
+  }
+
+  // 4 트리맵
+  var treemap = mk('c-treemap');
+  var TREE = [
+    { name: '전자', children: [['휴대폰', 420], ['노트북', 310], ['태블릿', 120], ['이어폰', 64], ['충전기', 28], ['케이블', 14]] },
+    { name: '의류', children: [['상의', 210], ['하의', 150], ['신발', 130], ['가방', 48], ['모자', 22]] },
+    { name: '식품', children: [['간편식', 160], ['음료', 92], ['과자', 58], ['커피', 40]] },
+    { name: '생활', children: [['세제', 70], ['휴지', 52], ['수납', 30], ['조명', 18]] }
+  ].map(function (g) { return { name: g.name, children: g.children.map(function (c) { return { name: c[0], value: c[1] }; }) }; });
+  function drawTreemap() {
+    var t = T(), size = Number($('t-size').value);
+    $('t-size-v').textContent = size + 'px' + (size === 11 ? ' (지금 고정값과 같음)' : '');
+    state('t-state', size !== 11, '글자 ' + size + 'px');
+    treemap.setOption({
+      color: SUPERSET,
+      series: [{
+        type: 'treemap', data: TREE, roam: false, nodeClick: false, breadcrumb: { show: false },
+        top: 4, left: 4, right: 4, bottom: 4,
+        label: { show: true, fontSize: size, fontFamily: t.font, color: '#fff', formatter: '{b}\n{c}' },
+        upperLabel: { show: true, height: 22, color: '#fff', fontFamily: t.font, fontWeight: 600 },
+        itemStyle: { borderColor: t.surface },
+        levels: [{ itemStyle: { borderWidth: 0, gapWidth: 3 } }, { itemStyle: { gapWidth: 1, borderWidth: 2 } }]
+      }]
+    }, true);
+  }
+
+  // 5 폭포
+  var waterfall = mk('c-waterfall');
+  function drawWaterfall() {
+    var t = T(), on = $('w-on').checked, w = Number($('w-width').value);
+    $('w-width').disabled = !on;
+    $('w-width-v').textContent = '칸 너비의 ' + w + '%';
+    state('w-state', on, '막대 두께 ' + w + '%');
+    var cats = ['10월 잔액', '급여', '부수입', '식비', '교통', '쇼핑', '저축 이체', '11월 잔액'];
+    var deltas = [null, 300, 45, -82, -24, -96, -150, null];
+    var start = 120, run = start, assist = [], inc = [], dec = [], tot = [];
+    cats.forEach(function (c, i) {
+      if (i === 0 || i === cats.length - 1) { assist.push(0); inc.push('-'); dec.push('-'); tot.push(run); return; }
+      var d = deltas[i];
+      if (d >= 0) { assist.push(run); inc.push(d); dec.push('-'); run += d; }
+      else { run += d; assist.push(run); dec.push(-d); inc.push('-'); }
+      tot.push('-');
+    });
+    var bw = on ? w + '%' : undefined;
+    function bar(name, data, color) { return { name: name, type: 'bar', stack: 'w', data: data, barWidth: bw, itemStyle: { color: color }, label: { show: true, position: 'top', color: t.muted, fontSize: 11, fontFamily: t.font, formatter: function (p) { return p.value === '-' ? '' : p.value; } } }; }
+    waterfall.setOption({
+      legend: { data: ['증가', '감소', '합계'], bottom: 0, textStyle: { color: t.fg, fontFamily: t.font } },
+      grid: { left: 44, right: 12, top: 24, bottom: 56 },
+      xAxis: { type: 'category', data: cats, axisLabel: { color: t.muted, fontFamily: t.font, interval: 0, fontSize: 11 }, axisLine: { lineStyle: { color: t.line } }, axisTick: { show: false } },
+      yAxis: { type: 'value', name: '만 원', nameTextStyle: { color: t.muted, fontFamily: t.font }, axisLabel: { color: t.muted }, splitLine: { lineStyle: { color: t.line } } },
+      series: [
+        { name: '보조', type: 'bar', stack: 'w', data: assist, barWidth: bw, itemStyle: { color: 'transparent' }, emphasis: { disabled: true }, silent: true },
+        bar('증가', inc, SUPERSET[2]), bar('감소', dec, SUPERSET[5]), bar('합계', tot, SUPERSET[1])
+      ]
+    }, true);
+  }
+
+  function drawAll() { drawGauge(); drawRadar(); drawFunnel(); drawTreemap(); drawWaterfall(); }
+  [['g-on', drawGauge], ['g-target', drawGauge], ['r-on', drawRadar], ['r-op', drawRadar], ['f-align', drawFunnel], ['f-gap', drawFunnel], ['t-size', drawTreemap], ['w-on', drawWaterfall], ['w-width', drawWaterfall]]
+    .forEach(function (p) { $(p[0]).addEventListener('input', p[1]); $(p[0]).addEventListener('change', p[1]); });
+
+  drawAll();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawAll);
+  window.addEventListener('resize', function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); });
+  // 테마가 바뀌면 차트 글자색을 다시 칠한다
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawAll);
+  new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+</script>

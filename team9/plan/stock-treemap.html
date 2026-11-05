@@ -1,0 +1,399 @@
+<title>Superset 주식 트리맵</title>
+<meta name="description" content="공개SW실무 9조: Superset 트리맵에 색 기준 지표를 더해 주식 시장 지도를 만드는 기능 예시">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 위는 설명과 보기 전환 버튼, 가운데는 설정 패널 + 큰 트리맵, 아래는 역할 분담과 고칠 파일 */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --fg: #1c2630;
+  --muted: #5d6973;
+  --line: #dbe2e7;
+  --accent: #1a93b1;
+  --new: #c2410c;
+  --new-soft: #fdeee4;
+  --header: #e7ecf0;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151a; --surface: #172028; --fg: #e4ebf0; --muted: #96a4ae; --line: #2a3742;
+    --accent: #45bfdc; --new: #fb923c; --new-soft: #3a2416; --header: #222d36;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151a; --surface: #172028; --fg: #e4ebf0; --muted: #96a4ae; --line: #2a3742;
+  --accent: #45bfdc; --new: #fb923c; --new-soft: #3a2416; --header: #222d36;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; display: flex; flex-direction: column; gap: 28px; }
+h1, h2 { text-wrap: balance; margin: 0; line-height: 1.3; }
+h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.2rem; font-weight: 700; }
+p { margin: 0; max-width: 70ch; }
+code { font-family: var(--font-mono); font-size: 0.86em; }
+.eyebrow { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+header { display: flex; flex-direction: column; gap: 10px; }
+header p { color: var(--muted); }
+
+.presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.presets button { font: inherit; font-size: 0.9rem; font-weight: 600; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.presets button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--bg); box-shadow: inset 0 0 0 1px var(--accent); }
+
+.app { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: 300px minmax(0, 1fr); overflow: hidden; }
+.panel { border-right: 1px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; background: var(--bg); }
+.panel-title { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.ctl { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); }
+.ctl.is-new { border-color: var(--new); background: var(--new-soft); }
+.ctl.old { opacity: 0.75; }
+.ctl.off { opacity: 0.45; }
+.lbl { font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.badge { font-size: 0.66rem; font-weight: 700; color: var(--new); border: 1px solid var(--new); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+.key { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+.val { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+.ctl select, .ctl input[type=text] { font: inherit; font-size: 0.85rem; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--fg); width: 100%; }
+.ctl input[type=text] { font-family: var(--font-mono); }
+.ctl input[type=range] { width: 100%; accent-color: var(--new); }
+.ctl input[type=checkbox] { accent-color: var(--new); width: 15px; height: 15px; }
+.row2 { display: flex; gap: 6px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.stage { padding: 14px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.state { font-size: 0.82rem; color: var(--muted); }
+.state b { color: var(--new); }
+#chart { width: 100%; height: 520px; }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; font-size: 0.8rem; color: var(--muted); }
+.scale { display: flex; flex-direction: column; gap: 2px; min-width: 220px; }
+.bar { height: 10px; border-radius: 3px; }
+.ticks { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.swatch { display: inline-block; width: 16px; height: 12px; border: 3px solid #FCC700; border-radius: 2px; vertical-align: -2px; margin-right: 6px; }
+
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.cols section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.75rem; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
+td .badge { display: inline-block; }
+.files { display: flex; flex-direction: column; gap: 4px; font-size: 0.86rem; }
+.files div { display: flex; gap: 10px; flex-wrap: wrap; }
+.files code { color: var(--fg); min-width: 170px; }
+.files span { color: var(--muted); }
+footer { font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+
+@media (max-width: 820px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .panel { border-right: 0; border-bottom: 1px solid var(--line); }
+  #chart { height: 420px; }
+  h1 { font-size: 1.5rem; }
+}
+</style>
+<style>
+.switches { display: flex; flex-wrap: wrap; gap: 12px 32px; }
+.switch-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.switch-group .eyebrow { min-width: 4.5em; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">공개SW실무 9조 · Apache Superset · 트리맵</span>
+    <h1>트리맵 색 기준 지표</h1>
+    <p>지금 Superset 트리맵은 칸 크기만 지표로 정하고, 색은 그룹마다 고정된 색으로 칠합니다. 여기에 <b>색 기준 지표</b>를 더하면 칸 크기와 색이 서로 다른 정보를 보여 줍니다. 주식이라면 크기는 시가총액, 색은 등락률입니다. 매장 매출이라면 크기는 매출, 색은 전년 대비 증감입니다.</p>
+  </header>
+
+  <div class="switches">
+    <div class="switch-group presets" role="group" aria-label="예시 데이터">
+      <span class="eyebrow">예시 데이터</span>
+      <button type="button" id="d-stock" aria-pressed="true">주식 시장</button>
+      <button type="button" id="d-store" aria-pressed="false">매장 매출</button>
+    </div>
+    <div class="switch-group presets" role="group" aria-label="보기 전환">
+      <span class="eyebrow">보기</span>
+      <button type="button" id="p-now" aria-pressed="false">지금 Superset</button>
+      <button type="button" id="p-base" aria-pressed="false">기본 기능만</button>
+      <button type="button" id="p-all" aria-pressed="true">기본 + 확장 전부</button>
+    </div>
+  </div>
+
+  <div class="app">
+    <div class="panel">
+      <span class="panel-title">Treemap · Chart Options</span>
+      <div class="ctl old"><span class="lbl">지표 (칸 크기)</span><span class="val" id="v-size"></span></div>
+      <div class="ctl is-new" id="w-color">
+        <label class="lbl" for="m-color">색 기준 지표 <span class="badge">기본 1</span></label>
+        <select id="m-color"><option value="none">없음 (지금처럼 그룹 색)</option><option value="change" id="o-color" selected></option></select>
+        <span class="key">color_metric</span>
+      </div>
+      <div class="ctl is-new" id="w-scale">
+        <span class="lbl">색 범위와 방식 <span class="badge">기본 2</span></span>
+        <input type="range" id="m-range" min="1" max="10" step="1" value="5" aria-label="색 범위">
+        <span class="val" id="m-range-v"></span>
+        <select id="m-style" aria-label="색 방식"><option value="kr">증가 빨강 · 감소 파랑 (한국 주식식)</option><option value="us">증가 초록 · 감소 빨강 (미국식)</option></select>
+        <span class="key">color_range · color_convention</span>
+      </div>
+      <div class="ctl is-new" id="w-tpl">
+        <label class="lbl" for="m-tpl">칸 안 내용 형식 <span class="badge">기본 3</span></label>
+        <input type="text" id="m-tpl" value="{name}\n{color}" spellcheck="false">
+        <span class="val" id="v-tpl"></span>
+        <span class="key">label_template</span>
+      </div>
+      <div class="ctl is-new" id="w-cmp">
+        <label class="lbl" for="m-cmp"><input type="checkbox" id="m-cmp" checked> 기간별 비교 <span class="badge">확장 1</span></label>
+        <select id="m-period" aria-label="비교 기간"></select>
+        <span class="key">time_compare</span>
+      </div>
+      <div class="ctl is-new" id="w-avg">
+        <label class="lbl" for="m-avg"><input type="checkbox" id="m-avg" checked> 그룹 평균 머리글 <span class="badge">확장 2</span></label>
+        <span class="val" id="v-avg"></span>
+        <span class="key">show_group_average</span>
+      </div>
+      <div class="ctl is-new" id="w-vol">
+        <label class="lbl" for="m-vol"><input type="checkbox" id="m-vol" checked> 조건 강조 테두리 <span class="badge">확장 3</span></label>
+        <input type="range" id="m-volth" min="1.5" max="4" step="0.5" value="3" aria-label="강조 기준 배수">
+        <span class="val" id="m-volth-v"></span>
+        <span class="key">highlight_condition</span>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="state" id="state"></div>
+      <div id="chart" role="img" aria-label="트리맵 예시"></div>
+      <div class="legend" id="legend">
+        <div class="scale" id="scale"><div class="bar" id="bar"></div><div class="ticks"><span id="t-min"></span><span>0%</span><span id="t-max"></span></div></div>
+        <span id="vol-legend"><span class="swatch"></span><span id="vol-legend-t"></span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <section>
+      <h2>구현 순서</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>단계</th><th>기능</th><th>하는 일</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge">기본 1</span></td><td>색 기준 지표</td><td>설정 칸 추가, 데이터 요청을 지표 2개로 바꾸기</td></tr>
+          <tr><td><span class="badge">기본 2</span></td><td>색 계산</td><td>0을 가운데 두는 색 계산, 범위, 색 방식, 색 범례</td></tr>
+          <tr><td><span class="badge">기본 3</span></td><td>칸 안 내용 형식</td><td>파이 차트의 <code>label_template</code> 방식을 트리맵에 적용</td></tr>
+          <tr><td><span class="badge">기본 4</span></td><td>툴팁·테스트·문서</td><td>툴팁에 색 지표 표시, 테스트 코드, 사용법 문서</td></tr>
+          <tr><td><span class="badge">확장 1</span></td><td>기간별 비교</td><td>값 하나로 이전 기간 대비 증감을 자동 계산 (시계열 차트에 있는 기능)</td></tr>
+          <tr><td><span class="badge">확장 2</span></td><td>그룹 평균 머리글</td><td>그룹 이름 옆에 크기 가중 평균 증감</td></tr>
+          <tr><td><span class="badge">확장 3</span></td><td>조건 강조 테두리</td><td>조건을 만족하는 칸에 테두리 (표 차트의 조건부 서식을 응용)</td></tr>
+        </tbody>
+      </table></div>
+      <p style="color:var(--muted);font-size:0.88rem">기본 1~4를 먼저 끝내고, 확장 1~3은 여유가 생기면 진행합니다.</p>
+    </section>
+    <section>
+      <h2>Superset에서 고칠 파일</h2>
+      <p style="color:var(--muted);font-size:0.88rem"><code>superset-frontend/plugins/plugin-chart-echarts/src/Treemap/</code></p>
+      <div class="files">
+        <div><code>controlPanel.tsx</code><span>새 설정 칸 (기본 1~3, 확장)</span></div>
+        <div><code>buildQuery.ts</code><span>지표 2개 요청 (기본 1), 기간별 비교 (확장 1)</span></div>
+        <div><code>transformProps.ts</code><span>색 계산, 칸 글자, 머리글, 테두리 (기본 2·3, 확장)</span></div>
+        <div><code>types.ts</code><span>새 옵션의 기본값</span></div>
+        <div><code>test/Treemap/*.test.ts</code><span>테스트 (기본 4)</span></div>
+      </div>
+      <p style="color:var(--muted);font-size:0.88rem">트리맵 색 처리 코드는 지금 다른 수정이 진행 중입니다 (<a href="https://github.com/apache/superset/pull/45140" style="color:var(--accent)">apache/superset#45140</a>). 그 수정이 병합된 뒤의 코드에서 시작합니다.</p>
+    </section>
+  </div>
+
+  <footer>주식 종목 이름 외의 숫자와 매장 데이터는 모두 예시이며 실제 시세나 매출이 아닙니다. Superset이 실제로 쓰는 ECharts 5로 그렸고, Superset 코드는 2026-10-11 master 브랜치를 기준으로 확인했습니다.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<script>
+(function () {
+  var SUPERSET = ['#1FA8C9', '#454E7C', '#5AC189', '#FF7F44', '#666666', '#E04355', '#FCC700', '#A868B7', '#3CCCCB', '#A38F79'];
+  var HIGHLIGHT = '#FCC700';
+  // 각 항목: [이름, 크기 지표, [기간별 증감 %], 강조 조건 값(평소 대비 배수)]
+  var DATA = {
+    stock: {
+      item: '종목', group: '섹터', size: '시가총액', unit: '조 원', unitShort: '조',
+      color: '등락률', extra: '거래량', extraSubj: '거래량이', periods: ['1일 전 대비', '1주 전 대비', '1달 전 대비'], base: 0, style: 'kr',
+      groups: [
+        { name: '반도체', items: [['삼성전자', 400, [2.1, 4.5, -3.2], 1.4], ['SK하이닉스', 150, [3.4, 7.8, 12.5], 2.2], ['한미반도체', 12, [6.8, 15.2, 28.4], 4.1], ['DB하이텍', 3, [-0.8, 1.2, -5.5], 0.9]] },
+        { name: '2차전지', items: [['LG에너지솔루션', 90, [-1.9, -4.2, -9.8], 1.1], ['삼성SDI', 25, [-2.6, -5.1, -12.3], 1.6], ['에코프로비엠', 15, [-4.3, -8.9, -18.0], 3.4], ['포스코퓨처엠', 14, [-3.1, -6.0, -14.6], 2.5]] },
+        { name: '바이오', items: [['삼성바이오로직스', 55, [-0.4, 1.6, 4.0], 0.9], ['셀트리온', 38, [1.8, -2.2, -6.1], 1.3], ['유한양행', 8, [5.2, 9.4, 21.7], 3.6]] },
+        { name: '자동차', items: [['현대차', 50, [0.6, 2.3, 5.1], 0.8], ['기아', 40, [1.1, 3.0, 6.4], 1.0], ['현대모비스', 22, [-0.3, 0.8, 2.2], 0.7]] },
+        { name: '금융', items: [['KB금융', 32, [1.5, 4.1, 9.6], 1.1], ['신한지주', 25, [1.2, 3.3, 7.4], 1.0], ['하나금융지주', 17, [0.8, 2.7, 6.2], 0.9], ['카카오뱅크', 11, [-1.6, -0.4, -4.8], 1.5]] },
+        { name: '인터넷·게임', items: [['NAVER', 30, [-1.2, 2.4, 8.9], 1.2], ['카카오', 18, [-2.4, -3.6, -7.2], 1.9], ['크래프톤', 13, [0.9, -1.5, 3.3], 0.8]] }
+      ]
+    },
+    store: {
+      item: '매장', group: '지역', size: '매출', unit: '억 원', unitShort: '억',
+      color: '증감률', extra: '방문객 수', extraSubj: '방문객 수가', periods: ['전월 대비', '전분기 대비', '전년 대비'], base: 2, style: 'us',
+      groups: [
+        { name: '서울', items: [['강남점', 48, [3.2, 5.1, 12.4], 1.3], ['잠실점', 41, [-1.4, 2.2, 6.8], 1.1], ['홍대점', 36, [4.8, 9.6, 18.2], 3.2], ['여의도점', 22, [-2.1, -4.4, -6.5], 0.8], ['성수점', 18, [7.5, 14.3, 31.0], 3.8]] },
+        { name: '경기', items: [['판교점', 33, [1.9, 4.0, 9.1], 1.2], ['분당점', 27, [0.4, -1.2, -2.3], 0.9], ['수원점', 25, [-0.8, 1.5, 3.4], 1.0], ['일산점', 19, [-3.6, -7.1, -11.8], 0.7]] },
+        { name: '부산', items: [['서면점', 24, [2.6, 3.8, 7.7], 1.4], ['해운대점', 21, [6.1, 11.4, 15.9], 2.6], ['센텀점', 17, [-1.1, -2.0, -4.1], 0.9]] },
+        { name: '대구', items: [['동성로점', 15, [-2.8, -5.5, -9.3], 0.8], ['수성점', 12, [0.7, 1.9, 2.8], 1.0]] },
+        { name: '대전', items: [['둔산점', 14, [1.2, 2.6, 5.2], 1.1], ['유성점', 9, [-4.2, -6.8, -13.5], 0.6]] },
+        { name: '광주', items: [['충장로점', 11, [0.3, 0.9, 1.6], 1.0], ['상무점', 8, [3.9, 8.2, 14.7], 2.9]] }
+      ]
+    }
+  };
+  var STYLE = {
+    kr: { up: [214, 60, 60], down: [43, 98, 196] },
+    us: { up: [48, 170, 90], down: [222, 60, 64] }
+  };
+  var NEUTRAL = [76, 84, 94];
+
+  var $ = function (id) { return document.getElementById(id); };
+  function tok(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function mix(a, b, k) { return 'rgb(' + a.map(function (v, i) { return Math.round(v + (b[i] - v) * k); }).join(',') + ')'; }
+  function pct(v) { return (v > 0 ? '+' : '') + v.toFixed(1) + '%'; }
+
+  var chart = echarts.init($('chart'), null, { renderer: 'svg' });
+  var ds = 'stock';
+
+  function setDataset(key) {
+    ds = key;
+    var d = DATA[key];
+    $('d-stock').setAttribute('aria-pressed', String(key === 'stock'));
+    $('d-store').setAttribute('aria-pressed', String(key === 'store'));
+    $('v-size').textContent = d.size + ' · metric (기존)';
+    $('o-color').textContent = d.color;
+    $('m-style').value = d.style;
+    $('m-period').innerHTML = d.periods.map(function (p, i) { return '<option value="' + i + '">' + p + '</option>'; }).join('');
+    $('m-period').value = String(d.base);
+    $('v-tpl').textContent = '{name} 이름 · {color} ' + d.color + ' · {size} ' + d.size + ' · {extra} ' + d.extra + ', 줄바꿈 \\n';
+    $('v-avg').textContent = d.group + ' 이름 옆에 ' + d.size + ' 가중 평균 ' + d.color;
+    $('chart').setAttribute('aria-label', d.item + ' 트리맵 예시');
+    draw();
+  }
+
+  function read() {
+    var d = DATA[ds];
+    return {
+      d: d,
+      on: $('m-color').value === 'change',
+      range: Number($('m-range').value),
+      style: $('m-style').value,
+      tpl: $('m-tpl').value,
+      cmp: $('m-cmp').checked,
+      period: $('m-cmp').checked ? Number($('m-period').value) : d.base,
+      avg: $('m-avg').checked,
+      vol: $('m-vol').checked,
+      volth: Number($('m-volth').value)
+    };
+  }
+
+  function colorFor(o, c) {
+    var k = Math.min(Math.abs(c) / o.range, 1);
+    return mix(NEUTRAL, c >= 0 ? STYLE[o.style].up : STYLE[o.style].down, k);
+  }
+
+  function draw() {
+    var o = read(), d = o.d;
+    var fg = tok('--fg'), header = tok('--header'), surface = tok('--surface'), font = tok('--font-body');
+
+    ['w-scale', 'w-tpl', 'w-cmp', 'w-avg', 'w-vol'].forEach(function (id) { $(id).classList.toggle('off', !o.on); });
+    ['m-range', 'm-style', 'm-tpl', 'm-cmp', 'm-avg', 'm-vol'].forEach(function (id) { $(id).disabled = !o.on; });
+    $('m-period').disabled = !o.on || !o.cmp;
+    $('m-volth').disabled = !o.on || !o.vol;
+    $('m-range-v').textContent = '±' + o.range + '%를 넘으면 가장 진한 색';
+    $('m-volth-v').textContent = d.extraSubj + ' 평소의 ' + o.volth + '배 이상';
+
+    var data = d.groups.map(function (g, gi) {
+      var total = 0, wsum = 0;
+      var kids = g.items.map(function (it) {
+        var c = it[2][o.period];
+        total += it[1]; wsum += it[1] * c;
+        var node = { name: it[0], value: it[1], chg: c, extra: it[3], group: g.name };
+        if (o.on) {
+          var hl = o.vol && it[3] >= o.volth;
+          node.itemStyle = { color: colorFor(o, c), borderColor: hl ? HIGHLIGHT : header, borderWidth: hl ? 3 : 1 };
+        }
+        return node;
+      });
+      var parent = { name: g.name, avg: wsum / total, children: kids };
+      parent.itemStyle = o.on ? { color: header, borderColor: header } : { color: SUPERSET[gi % SUPERSET.length] };
+      return parent;
+    });
+
+    var leafLabel = function (p) {
+      var n = p.data;
+      if (!o.on) return n.name + '\n' + n.value;
+      return o.tpl
+        .replace(/\{name\}/g, n.name)
+        .replace(/\{color\}/g, pct(n.chg))
+        .replace(/\{size\}/g, n.value + d.unitShort)
+        .replace(/\{extra\}/g, n.extra + '배')
+        .replace(/\\n/g, '\n');
+    };
+    var upper = function (p) {
+      if (o.on && o.avg && p.data && p.data.avg != null) return p.name + '   ' + pct(p.data.avg);
+      return p.name;
+    };
+
+    chart.setOption({
+      tooltip: {
+        confine: true,
+        textStyle: { fontFamily: font },
+        formatter: function (p) {
+          var n = p.data || {};
+          if (n.children) return '<b>' + n.name + '</b>' + (o.on ? '<br>' + d.size + ' 가중 평균 ' + d.color + ' ' + pct(n.avg) : '');
+          var lines = ['<b>' + n.name + '</b> · ' + n.group, d.size + ' ' + n.value + d.unit];
+          if (o.on) { lines.push(d.periods[o.period] + ' ' + d.color + ' ' + pct(n.chg)); lines.push(d.extra + ' 평소의 ' + n.extra + '배'); }
+          return lines.join('<br>');
+        }
+      },
+      series: [{
+        type: 'treemap', data: data, roam: false, nodeClick: false, breadcrumb: { show: false },
+        top: 0, left: 0, right: 0, bottom: 0,
+        label: { show: true, formatter: leafLabel, color: '#fff', fontFamily: font, fontSize: 12, lineHeight: 16, overflow: 'truncate' },
+        upperLabel: { show: true, height: 24, formatter: upper, color: o.on ? fg : '#fff', fontFamily: font, fontWeight: 600, fontSize: 12 },
+        levels: [
+          { itemStyle: { borderWidth: 0, gapWidth: 3, borderColor: surface }, upperLabel: { show: false } },
+          { itemStyle: { borderWidth: 2, gapWidth: 2 } },
+          o.on ? {} : { colorSaturation: [0.35, 0.6], itemStyle: { borderColor: surface, borderWidth: 1, gapWidth: 1 } }
+        ]
+      }]
+    }, true);
+
+    $('state').innerHTML = o.on
+      ? '<b>새 기능 적용</b> · 칸 크기 = ' + d.size + ', 색 = ' + d.periods[o.period] + ' ' + d.color
+      : '지금 Superset 모습 · 칸 크기 = ' + d.size + ', 색 = ' + d.group + '별 고정 색';
+
+    $('legend').hidden = !o.on;
+    $('bar').style.background = 'linear-gradient(90deg,' + colorFor(o, -o.range) + ',' + mix(NEUTRAL, NEUTRAL, 0) + ',' + colorFor(o, o.range) + ')';
+    $('t-min').textContent = '-' + o.range + '%';
+    $('t-max').textContent = '+' + o.range + '%';
+    $('vol-legend').hidden = !o.vol;
+    $('vol-legend-t').textContent = d.extraSubj + ' 평소의 ' + o.volth + '배 이상';
+
+    var preset = !o.on ? 'p-now' : (o.cmp && o.avg && o.vol ? 'p-all' : (!o.cmp && !o.avg && !o.vol ? 'p-base' : ''));
+    ['p-now', 'p-base', 'p-all'].forEach(function (id) { $(id).setAttribute('aria-pressed', String(id === preset)); });
+  }
+
+  function setPreset(on, ext) {
+    $('m-color').value = on ? 'change' : 'none';
+    $('m-cmp').checked = ext; $('m-avg').checked = ext; $('m-vol').checked = ext;
+    if (!ext) $('m-period').value = String(DATA[ds].base);
+    draw();
+  }
+  $('d-stock').addEventListener('click', function () { setDataset('stock'); });
+  $('d-store').addEventListener('click', function () { setDataset('store'); });
+  $('p-now').addEventListener('click', function () { setPreset(false, false); });
+  $('p-base').addEventListener('click', function () { setPreset(true, false); });
+  $('p-all').addEventListener('click', function () { setPreset(true, true); });
+  ['m-color', 'm-range', 'm-style', 'm-tpl', 'm-cmp', 'm-period', 'm-avg', 'm-vol', 'm-volth'].forEach(function (id) {
+    $(id).addEventListener('input', draw); $(id).addEventListener('change', draw);
+  });
+
+  // 주소 끝 #store 로 매장 데이터, #now·#base 로 해당 보기를 바로 연다 (예: #store-now)
+  var hash = location.hash.slice(1).split('-');
+  setDataset(hash.indexOf('store') >= 0 ? 'store' : 'stock');
+  if (hash.indexOf('now') >= 0) setPreset(false, false);
+  else if (hash.indexOf('base') >= 0) setPreset(true, false);
+
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+  window.addEventListener('resize', function () { chart.resize(); });
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+</script>
