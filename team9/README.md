@@ -51,3 +51,8 @@ team9/
 - 작업이 끝나면 `team9/main`으로 PR을 올리고, 1명 이상 승인을 받은 뒤 병합합니다. `team9/main`에 직접 푸시는 막혀 있습니다.
 - PR을 만들 때 대상 저장소가 `apache/superset`이 아니라 `mju-oss-9/superset`인지 꼭 확인합니다. `gh`를 쓴다면 처음 한 번 `gh repo set-default mju-oss-9/superset`을 실행합니다.
 - 저장소가 크므로 처음 받을 때는 `git clone --filter=blob:none https://github.com/mju-oss-9/superset.git`을 권장합니다.
+
+## 개발 환경 준비
+
+- 받을 때: `git clone --filter=blob:none` 방식으로 받으면 과거 기록 파일은 필요할 때만 내려받아서 처음 받는 시간과 용량이 크게 줄어듭니다.
+- 실행할 때: Superset은 Docker로 띄우는 게 표준이라 Docker Desktop이 필요합니다. 메모리는 최소 8GB, 넉넉하게는 16GB가 있어야 하고, 디스크도 이미지와 `node_modules`까지 합쳐 수십 GB를 잡아 두는 게 안전합니다. 노트북 사양이 낮다면 미리 확인해 주세요.
