@@ -33,6 +33,7 @@ import type { TreemapSeriesOption } from 'echarts/charts';
 import {
   DEFAULT_FORM_DATA as DEFAULT_TREEMAP_FORM_DATA,
   EchartsTreemapChartProps,
+  EchartsTreemapColorConvention,
   EchartsTreemapFormData,
   EchartsTreemapLabelType,
   TreemapSeriesCallbackDataParams,
@@ -50,15 +51,66 @@ import { OpacityEnum } from '../constants';
 import { getDefaultTooltip } from '../utils/tooltip';
 import { Refs } from '../types';
 import { treeBuilder, TreeNode } from '../utils/treeBuilder';
+import {
+  NEUTRAL_COLOR,
+  getConventionColors,
+  getDivergingColor,
+  normalizeColorRange,
+} from './colorUtils';
+
+/** Height reserved under the treemap for the color legend. */
+const COLOR_LEGEND_HEIGHT = 24;
+
+/**
+ * Treemap node with the value of the color metric attached, so that the
+ * label and tooltip formatters can read it back from `params.data`.
+ */
+type TreemapNodeItem = TreemapSeriesNodeItemOption & {
+  secondaryValue?: number;
+};
+
+function getColorValue(
+  params: TreemapSeriesCallbackDataParams,
+): number | undefined {
+  const data = params.data as TreemapNodeItem | undefined;
+  return typeof data?.secondaryValue === 'number'
+    ? data.secondaryValue
+    : undefined;
+}
+
+/**
+ * Fills a label template.
+ * Variables: {name} (cell name), {size} (size metric), {color} (color
+ * metric, empty when there is none). `\n` means a new line.
+ */
+export function formatLabelTemplate(
+  template: string,
+  values: { name: string; size: string; color: string },
+): string {
+  const items: Record<string, string> = {
+    '{name}': values.name,
+    '{size}': values.size,
+    '{color}': values.color,
+    '\\n': '\n',
+  };
+  return Object.entries(items).reduce(
+    (acc, [key, value]) => acc.replaceAll(key, value),
+    template,
+  );
+}
 
 export function formatLabel({
   params,
   labelType,
   numberFormatter,
+  labelTemplate,
+  colorFormatter,
 }: {
   params: TreemapSeriesCallbackDataParams;
   labelType: EchartsTreemapLabelType;
   numberFormatter: ValueFormatter;
+  labelTemplate?: string | null;
+  colorFormatter?: ValueFormatter;
 }): string {
   const { name = '', value } = params;
   const formattedValue = numberFormatter(value as number);
@@ -70,6 +122,20 @@ export function formatLabel({
       return formattedValue;
     case EchartsTreemapLabelType.KeyValue:
       return `${name}: ${formattedValue}`;
+    case EchartsTreemapLabelType.Template: {
+      if (!labelTemplate) {
+        return name;
+      }
+      const colorValue = getColorValue(params);
+      return formatLabelTemplate(labelTemplate, {
+        name,
+        size: formattedValue,
+        color:
+          colorValue === undefined
+            ? ''
+            : (colorFormatter ?? numberFormatter)(colorValue),
+      });
+    }
     default:
       return name;
   }
@@ -78,9 +144,13 @@ export function formatLabel({
 export function formatTooltip({
   params,
   numberFormatter,
+  colorMetricLabel,
+  colorFormatter,
 }: {
   params: TreemapSeriesCallbackDataParams;
   numberFormatter: ValueFormatter;
+  colorMetricLabel?: string;
+  colorFormatter?: ValueFormatter;
 }): string {
   const { value, treePathInfo = [] } = params;
   const formattedValue = numberFormatter(value as number);
@@ -101,7 +171,15 @@ export function formatTooltip({
   if (formattedPercent) {
     row.push(formattedPercent);
   }
-  return tooltipHtml([row], treePath.join(' ▸ '));
+  const rows = [row];
+  const colorValue = getColorValue(params);
+  if (colorMetricLabel && colorValue !== undefined) {
+    rows.push([
+      colorMetricLabel,
+      (colorFormatter ?? numberFormatter)(colorValue),
+    ]);
+  }
+  return tooltipHtml(rows, treePath.join(' ▸ '));
 }
 
 export default function transformProps(
@@ -142,6 +220,10 @@ export default function transformProps(
     showUpperLabels,
     dashboardId,
     sliceId,
+    secondaryMetric,
+    colorRange,
+    colorConvention = EchartsTreemapColorConvention.Kr,
+    labelTemplate,
   }: EchartsTreemapFormData = {
     ...DEFAULT_TREEMAP_FORM_DATA,
     ...formData,
@@ -160,21 +242,47 @@ export default function transformProps(
     detectedCurrency,
   );
 
+  // Color metric: when set, leaf color follows its value (diverging around 0)
+  // instead of the categorical color of its name.
+  const useColorMetric = Boolean(secondaryMetric);
+  const colorMetricLabel = secondaryMetric
+    ? getMetricLabel(secondaryMetric)
+    : undefined;
+  const range = normalizeColorRange(colorRange);
+  const colorFormatter = getNumberFormatter(numberFormat);
+
   const formatter = (params: TreemapSeriesCallbackDataParams) =>
     formatLabel({
       params,
       numberFormatter,
       labelType,
+      labelTemplate,
+      colorFormatter,
     });
 
   const columnsLabelMap = new Map<string, string[]>();
   const metricLabel = getMetricLabel(metric);
   const groupbyLabels = groupby.map(getColumnLabel);
-  const treeData = treeBuilder(data, groupbyLabels, metricLabel);
+  const treeData = treeBuilder(
+    data,
+    groupbyLabels,
+    metricLabel,
+    colorMetricLabel,
+  );
   const labelProps = {
     color: theme.colorText,
   };
-  const traverse = (treeNodes: TreeNode[], path: string[]) =>
+  const getNodeColor = (treeNode: TreeNode, name: string) => {
+    if (!useColorMetric) {
+      return colorFn(name, sliceId);
+    }
+    // Parent (group) cells get a neutral background so the leaf colors
+    // stand out; their summed value has no meaning for ratio metrics.
+    return treeNode.children?.length
+      ? NEUTRAL_COLOR
+      : getDivergingColor(treeNode.secondaryValue, range, colorConvention);
+  };
+  const traverse = (treeNodes: TreeNode[], path: string[]): TreemapNodeItem[] =>
     treeNodes.map(treeNode => {
       const { name: nodeName, value, groupBy } = treeNode;
       const name = formatSeriesName(nodeName, {
@@ -184,16 +292,22 @@ export default function transformProps(
         }),
       });
       const newPath = path.concat(name);
-      let item: TreemapSeriesNodeItemOption = {
+      let item: TreemapNodeItem = {
         name,
         value,
-        colorSaturation: COLOR_SATURATION,
+        // colorSaturation would shift the value-based colors, so it is only
+        // used with categorical colors.
+        ...(!useColorMetric && { colorSaturation: COLOR_SATURATION }),
         itemStyle: {
           borderColor: BORDER_COLOR,
-          color: colorFn(name, sliceId),
+          color: getNodeColor(treeNode, name),
           borderWidth: BORDER_WIDTH,
           gapWidth: GAP_WIDTH,
         },
+        ...(useColorMetric &&
+          !treeNode.children?.length && {
+            secondaryValue: treeNode.secondaryValue,
+          }),
       };
       if (treeNode.children?.length) {
         item = {
@@ -228,10 +342,12 @@ export default function transformProps(
   const transformedData: TreemapSeriesNodeItemOption[] = [
     {
       name: metricLabel,
-      colorSaturation: COLOR_SATURATION,
+      ...(!useColorMetric && { colorSaturation: COLOR_SATURATION }),
       itemStyle: {
         borderColor: BORDER_COLOR,
-        color: colorFn(`${metricLabel}`, sliceId),
+        color: useColorMetric
+          ? NEUTRAL_COLOR
+          : colorFn(`${metricLabel}`, sliceId),
         borderWidth: BORDER_WIDTH,
         gapWidth: GAP_WIDTH,
       },
@@ -261,7 +377,10 @@ export default function transformProps(
     {
       type: 'treemap',
       width: '100%',
-      height: '100%',
+      // leave room for the color legend at the bottom
+      ...(useColorMetric
+        ? { top: 0, bottom: COLOR_LEGEND_HEIGHT }
+        : { height: '100%' }),
       nodeClick: undefined,
       roam: !dashboardId,
       breadcrumb: {
@@ -293,6 +412,66 @@ export default function transformProps(
     },
   ];
 
+  // Color legend: decrease color -> neutral -> increase color, with the
+  // color range as end labels.
+  const { increase, decrease } = getConventionColors(colorConvention);
+  const legendLabelStyle = {
+    fill: theme.colorText,
+    fontSize: LABEL_FONTSIZE,
+    verticalAlign: 'middle',
+  };
+  const graphic = useColorMetric
+    ? [
+        {
+          type: 'group',
+          right: 8,
+          bottom: 4,
+          children: [
+            {
+              type: 'text',
+              x: 0,
+              y: 8,
+              style: {
+                ...legendLabelStyle,
+                text: `${colorMetricLabel}  ${colorFormatter(-range)}`,
+                align: 'right',
+              },
+            },
+            {
+              type: 'rect',
+              x: 6,
+              y: 3,
+              shape: { width: 120, height: 10 },
+              style: {
+                fill: {
+                  type: 'linear',
+                  x: 0,
+                  y: 0,
+                  x2: 1,
+                  y2: 0,
+                  colorStops: [
+                    { offset: 0, color: decrease },
+                    { offset: 0.5, color: NEUTRAL_COLOR },
+                    { offset: 1, color: increase },
+                  ],
+                },
+              },
+            },
+            {
+              type: 'text',
+              x: 132,
+              y: 8,
+              style: {
+                ...legendLabelStyle,
+                text: `+${colorFormatter(range)}`,
+                align: 'left',
+              },
+            },
+          ],
+        },
+      ]
+    : undefined;
+
   const echartOptions: EChartsCoreOption = {
     tooltip: {
       ...getDefaultTooltip(refs),
@@ -302,9 +481,12 @@ export default function transformProps(
         formatTooltip({
           params,
           numberFormatter,
+          colorMetricLabel,
+          colorFormatter,
         }),
     },
     series,
+    ...(graphic && { graphic }),
   };
   return {
     formData,
