@@ -19,6 +19,7 @@
 import { t } from '@apache-superset/core/translation';
 import {
   ControlPanelConfig,
+  ControlPanelsContainerProps,
   ControlSubSectionHeader,
   D3_FORMAT_DOCS,
   D3_NUMBER_FORMAT_DESCRIPTION_VALUES_TEXT,
@@ -26,10 +27,20 @@ import {
   D3_TIME_FORMAT_OPTIONS,
   getStandardizedControls,
 } from '@superset-ui/chart-controls';
-import { DEFAULT_FORM_DATA } from './types';
+import { DEFAULT_FORM_DATA, EchartsTreemapColorConvention } from './types';
 
-const { labelType, numberFormat, showLabels, showUpperLabels, dateFormat } =
-  DEFAULT_FORM_DATA;
+const {
+  labelType,
+  numberFormat,
+  showLabels,
+  showUpperLabels,
+  dateFormat,
+  colorRange,
+  colorConvention,
+} = DEFAULT_FORM_DATA;
+
+const hasColorMetric = ({ controls }: ControlPanelsContainerProps) =>
+  Boolean(controls?.secondary_metric?.value);
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
@@ -39,6 +50,7 @@ const config: ControlPanelConfig = {
       controlSetRows: [
         ['groupby'],
         ['metric'],
+        ['secondary_metric'],
         ['row_limit'],
         ['sort_by_metric'],
         ['adhoc_filters'],
@@ -49,6 +61,47 @@ const config: ControlPanelConfig = {
       expanded: true,
       controlSetRows: [
         ['color_scheme'],
+        [
+          {
+            name: 'color_range',
+            config: {
+              type: 'TextControl',
+              isFloat: true,
+              label: t('Color range'),
+              renderTrigger: true,
+              default: colorRange,
+              description: t(
+                'Values at or beyond ±this value get the darkest color. ' +
+                  'Use the same unit as the color metric ' +
+                  '(e.g. 5 for ±5% when the metric is in percent).',
+              ),
+              visibility: hasColorMetric,
+            },
+          },
+        ],
+        [
+          {
+            name: 'color_convention',
+            config: {
+              type: 'SelectControl',
+              label: t('Color convention'),
+              renderTrigger: true,
+              default: colorConvention,
+              choices: [
+                [
+                  EchartsTreemapColorConvention.Kr,
+                  t('Increase red, decrease blue'),
+                ],
+                [
+                  EchartsTreemapColorConvention.Us,
+                  t('Increase green, decrease red'),
+                ],
+              ],
+              description: t('Colors used for positive and negative values.'),
+              visibility: hasColorMetric,
+            },
+          },
+        ],
         [<ControlSubSectionHeader>{t('Labels')}</ControlSubSectionHeader>],
         [
           {
@@ -86,8 +139,27 @@ const config: ControlPanelConfig = {
                 ['Key', t('Key')],
                 ['value', t('Value')],
                 ['key_value', t('Category and Value')],
+                ['template', t('Template')],
               ],
               description: t('What should be shown on the label?'),
+            },
+          },
+        ],
+        [
+          {
+            name: 'label_template',
+            config: {
+              type: 'TextControl',
+              label: t('Label Template'),
+              renderTrigger: true,
+              description: t(
+                'Format cell labels. ' +
+                  'Use variables: {name}, {size}, {color}. ' +
+                  '{color} is the color metric value. ' +
+                  '\\n represents a new line.',
+              ),
+              visibility: ({ controls }: ControlPanelsContainerProps) =>
+                controls?.label_type?.value === 'template',
             },
           },
         ],
@@ -123,6 +195,21 @@ const config: ControlPanelConfig = {
       ],
     },
   ],
+  controlOverrides: {
+    secondary_metric: {
+      label: t('Color metric'),
+      default: null,
+      description: t(
+        '[optional] Metric that decides the cell color, separately from ' +
+          'the size metric. Colors diverge around 0 (e.g. price change). ' +
+          'When omitted, the color is categorical and based on labels.',
+      ),
+    },
+    color_scheme: {
+      visibility: ({ controls }: ControlPanelsContainerProps) =>
+        !controls?.secondary_metric?.value,
+    },
+  },
   formDataOverrides: formData => ({
     ...formData,
     metric: getStandardizedControls().shiftMetric(),

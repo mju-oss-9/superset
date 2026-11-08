@@ -33,4 +33,13 @@ describe('Treemap buildQuery', () => {
     expect(query.metrics).toEqual(['foo']);
     expect(query.columns).toEqual(['bar']);
   });
+
+  test('should also request the color metric (secondary_metric)', () => {
+    const queryContext = buildQuery({
+      ...formData,
+      secondary_metric: 'baz',
+    });
+    const [query] = queryContext.queries;
+    expect(query.metrics).toEqual(['foo', 'baz']);
+  });
 });

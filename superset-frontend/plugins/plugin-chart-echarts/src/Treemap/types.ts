@@ -43,12 +43,27 @@ export type EchartsTreemapFormData = QueryFormData & {
   numberFormat: string;
   dateFormat: string;
   dashboardId?: number;
+  /** Metric that decides cell color (size still comes from `metric`). */
+  secondaryMetric?: QueryFormMetric | null;
+  /** |value| at or above this gets the darkest color. Same unit as the metric. */
+  colorRange?: number | string;
+  colorConvention?: EchartsTreemapColorConvention;
+  /** Used when labelType is Template. Variables: {name}, {size}, {color}. */
+  labelTemplate?: string | null;
 };
 
 export enum EchartsTreemapLabelType {
   Key = 'key',
   Value = 'value',
   KeyValue = 'key_value',
+  Template = 'template',
+}
+
+export enum EchartsTreemapColorConvention {
+  /** increase red, decrease blue */
+  Kr = 'kr',
+  /** increase green, decrease red */
+  Us = 'us',
 }
 
 export interface EchartsTreemapChartProps extends ChartProps<EchartsTreemapFormData> {
@@ -64,6 +79,10 @@ export const DEFAULT_FORM_DATA: Partial<EchartsTreemapFormData> = {
   showLabels: true,
   showUpperLabels: true,
   dateFormat: 'smart_date',
+  secondaryMetric: null,
+  colorRange: 5,
+  colorConvention: EchartsTreemapColorConvention.Kr,
+  labelTemplate: null,
 };
 export interface TreemapSeriesCallbackDataParams extends CallbackDataParams {
   treePathInfo?: TreePathInfo[];
