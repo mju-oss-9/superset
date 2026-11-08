@@ -135,15 +135,15 @@ describe('Treemap transformProps with color metric', () => {
     const result = transformProps(getProps({ secondary_metric: 'change_pct' }));
     const { leaves, root } = getLeaves(result);
     const kr = EchartsTreemapColorConvention.Kr;
-    expect(leaves.AAA.itemStyle.color).toBe('#d7301f');
-    expect(leaves.BBB.itemStyle.color).toBe('#2166ac');
+    expect(leaves.AAA.itemStyle.color).toBe('#d63c3c');
+    expect(leaves.BBB.itemStyle.color).toBe('#2b62c4');
     expect(leaves.CCC.itemStyle.color).toBe(NEUTRAL_COLOR);
     expect(leaves.DDD.itemStyle.color).toBe(getDivergingColor(2.5, 5, kr));
     expect(leaves.AAA.secondaryValue).toBe(5);
     expect(leaves.AAA.value).toBe(100);
     // groups get a neutral background
     root.children.forEach((group: any) =>
-      expect(group.itemStyle.color).toBe(NEUTRAL_COLOR),
+      expect(group.itemStyle.color).toBe(supersetTheme.colorFillSecondary),
     );
     expect(result.echartOptions.graphic).toBeDefined();
   });
@@ -157,10 +157,10 @@ describe('Treemap transformProps with color metric', () => {
       }),
     );
     const { leaves } = getLeaves(result);
-    expect(leaves.AAA.itemStyle.color).toBe('#1a9850');
-    expect(leaves.BBB.itemStyle.color).toBe('#d7301f');
+    expect(leaves.AAA.itemStyle.color).toBe('#30aa5a');
+    expect(leaves.BBB.itemStyle.color).toBe('#de3c40');
     // 2.5 is now the full range
-    expect(leaves.DDD.itemStyle.color).toBe('#1a9850');
+    expect(leaves.DDD.itemStyle.color).toBe('#30aa5a');
   });
 
   test('shows the color metric in the tooltip of a leaf', () => {
@@ -194,7 +194,7 @@ describe('Treemap formatLabel template', () => {
       labelTemplate: '{name}\\n{size} / {color}',
       numberFormatter,
     });
-    expect(label).toBe('AAA\n1k / 2.5');
+    expect(label).toBe('AAA\n1k / +2.5');
   });
 
   test('empty {color} when there is no color metric value', () => {

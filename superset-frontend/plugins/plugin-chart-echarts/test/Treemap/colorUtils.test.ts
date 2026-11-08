@@ -19,6 +19,7 @@
 import {
   DEFAULT_COLOR_RANGE,
   NEUTRAL_COLOR,
+  formatSigned,
   getConventionColors,
   getDivergingColor,
   normalizeColorRange,
@@ -39,16 +40,16 @@ describe('Treemap getDivergingColor', () => {
     const { increase, decrease } = getConventionColors(Kr);
     expect(getDivergingColor(5, 5, Kr)).toBe(increase);
     expect(getDivergingColor(-5, 5, Kr)).toBe(decrease);
-    expect(increase).toBe('#d7301f');
-    expect(decrease).toBe('#2166ac');
+    expect(increase).toBe('#d63c3c');
+    expect(decrease).toBe('#2b62c4');
   });
 
   test('us: increase green, decrease red at full range', () => {
     const { increase, decrease } = getConventionColors(Us);
     expect(getDivergingColor(5, 5, Us)).toBe(increase);
     expect(getDivergingColor(-5, 5, Us)).toBe(decrease);
-    expect(increase).toBe('#1a9850');
-    expect(decrease).toBe('#d7301f');
+    expect(increase).toBe('#30aa5a');
+    expect(decrease).toBe('#de3c40');
   });
 
   test('clamps values beyond the range to the darkest color', () => {
@@ -60,8 +61,17 @@ describe('Treemap getDivergingColor', () => {
     const half = getDivergingColor(2.5, 5, Kr);
     expect(half).not.toBe(NEUTRAL_COLOR);
     expect(half).not.toBe(getDivergingColor(5, 5, Kr));
-    // halfway between #8c8c8c and #d7301f
-    expect(half).toBe('#b25e56');
+    // halfway between #4c545e and #d63c3c
+    expect(half).toBe('#91484d');
+  });
+});
+
+describe('Treemap formatSigned', () => {
+  const fmt = (v: number) => v.toFixed(1);
+  test('adds + only to positive values', () => {
+    expect(formatSigned(fmt, 2.1)).toBe('+2.1');
+    expect(formatSigned(fmt, -2.1)).toBe('-2.1');
+    expect(formatSigned(fmt, 0)).toBe('0.0');
   });
 });
 

@@ -53,6 +53,7 @@ import { Refs } from '../types';
 import { treeBuilder, TreeNode } from '../utils/treeBuilder';
 import {
   NEUTRAL_COLOR,
+  formatSigned,
   getConventionColors,
   getDivergingColor,
   normalizeColorRange,
@@ -133,7 +134,7 @@ export function formatLabel({
         color:
           colorValue === undefined
             ? ''
-            : (colorFormatter ?? numberFormatter)(colorValue),
+            : formatSigned(colorFormatter ?? numberFormatter, colorValue),
       });
     }
     default:
@@ -176,7 +177,7 @@ export function formatTooltip({
   if (colorMetricLabel && colorValue !== undefined) {
     rows.push([
       colorMetricLabel,
-      (colorFormatter ?? numberFormatter)(colorValue),
+      formatSigned(colorFormatter ?? numberFormatter, colorValue),
     ]);
   }
   return tooltipHtml(rows, treePath.join(' ▸ '));
@@ -279,9 +280,12 @@ export default function transformProps(
     // Parent (group) cells get a neutral background so the leaf colors
     // stand out; their summed value has no meaning for ratio metrics.
     return treeNode.children?.length
-      ? NEUTRAL_COLOR
+      ? GROUP_BG_COLOR
       : getDivergingColor(treeNode.secondaryValue, range, colorConvention);
   };
+  // Group cells: a light background like a header, so the group name
+  // (dark text) and the value-colored leaves stand out.
+  const GROUP_BG_COLOR = theme.colorFillSecondary;
   const traverse = (treeNodes: TreeNode[], path: string[]): TreemapNodeItem[] =>
     treeNodes.map(treeNode => {
       const { name: nodeName, value, groupBy } = treeNode;
@@ -307,6 +311,8 @@ export default function transformProps(
         ...(useColorMetric &&
           !treeNode.children?.length && {
             secondaryValue: treeNode.secondaryValue,
+            // white text reads well on the saturated value colors
+            label: { color: '#fff' },
           }),
       };
       if (treeNode.children?.length) {
@@ -346,7 +352,7 @@ export default function transformProps(
       itemStyle: {
         borderColor: BORDER_COLOR,
         color: useColorMetric
-          ? NEUTRAL_COLOR
+          ? GROUP_BG_COLOR
           : colorFn(`${metricLabel}`, sliceId),
         borderWidth: BORDER_WIDTH,
         gapWidth: GAP_WIDTH,
@@ -433,7 +439,7 @@ export default function transformProps(
               y: 8,
               style: {
                 ...legendLabelStyle,
-                text: `${colorMetricLabel}  ${colorFormatter(-range)}`,
+                text: `${colorMetricLabel}  ${formatSigned(colorFormatter, -range)}`,
                 align: 'right',
               },
             },
@@ -441,7 +447,7 @@ export default function transformProps(
               type: 'rect',
               x: 6,
               y: 3,
-              shape: { width: 120, height: 10 },
+              shape: { width: 120, height: 10, r: 3 },
               style: {
                 fill: {
                   type: 'linear',
@@ -463,7 +469,7 @@ export default function transformProps(
               y: 8,
               style: {
                 ...legendLabelStyle,
-                text: `+${colorFormatter(range)}`,
+                text: formatSigned(colorFormatter, range),
                 align: 'left',
               },
             },

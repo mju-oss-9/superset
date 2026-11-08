@@ -18,11 +18,12 @@
  */
 import { EchartsTreemapColorConvention } from './types';
 
-/** Color used for a value of exactly 0 and for parent (group) nodes. */
-export const NEUTRAL_COLOR = '#8c8c8c';
-const RED = '#d7301f';
-const BLUE = '#2166ac';
-const GREEN = '#1a9850';
+/** Color used for a value of exactly 0 (dark enough for white labels). */
+export const NEUTRAL_COLOR = '#4c545e';
+const KR_INCREASE = '#d63c3c';
+const KR_DECREASE = '#2b62c4';
+const US_INCREASE = '#30aa5a';
+const US_DECREASE = '#de3c40';
 
 export const DEFAULT_COLOR_RANGE = 5;
 
@@ -35,8 +36,8 @@ export function getConventionColors(
   convention: EchartsTreemapColorConvention = EchartsTreemapColorConvention.Kr,
 ): { increase: string; decrease: string } {
   return convention === EchartsTreemapColorConvention.Us
-    ? { increase: GREEN, decrease: RED }
-    : { increase: RED, decrease: BLUE };
+    ? { increase: US_INCREASE, decrease: US_DECREASE }
+    : { increase: KR_INCREASE, decrease: KR_DECREASE };
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -59,6 +60,18 @@ function mix(from: string, to: string, ratio: number): string {
     a[1] + (b[1] - a[1]) * ratio,
     a[2] + (b[2] - a[2]) * ratio,
   ]);
+}
+
+/**
+ * Formats a value with an explicit sign for positive numbers (+2.1),
+ * as usual for changes.
+ */
+export function formatSigned(
+  formatter: (value: number) => string,
+  value: number,
+): string {
+  const formatted = formatter(value);
+  return value > 0 && !formatted.startsWith('+') ? `+${formatted}` : formatted;
 }
 
 /**
